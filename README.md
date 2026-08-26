@@ -35,7 +35,7 @@ Moreover, we tightly integrate functionality for deploying functions using [stra
 When differentiating through exact log probabilities, prefer `mode="smooth"`. Sparse modes (`"c0"`, `"c1"`, `"c2"`) can produce exact zero probabilities, whose exact log is `-inf`; replacing `-inf` after the log, e.g. with `jnp.nan_to_num`, does not generally make gradients finite. If you want bounded log values for a sparse mode, use `return_log_probs=True, log_prob_eps=eps`. This floors probabilities before taking `log` and renormalizes along the soft-index axis, so exponentiating the returned logs still sums to 1 up to floating-point error.
 
 ## Installation
-Requires Python 3.11+.
+Requires Python 3.12+.
 ```
 pip install softjax
 ```
