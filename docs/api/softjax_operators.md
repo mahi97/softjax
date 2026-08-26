@@ -1,5 +1,9 @@
 # Softjax operators
 
+See [Relaxation policy and registry](relaxation.md) for the shared
+`RelaxationPolicy`, operator registry, and `supported_relaxations` /
+`relaxation_limitations` APIs.
+
 ## Helper functions
 
 ::: softjax.sigmoidal
