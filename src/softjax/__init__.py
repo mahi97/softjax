@@ -56,6 +56,8 @@ from .functions import (
     top_k,
     where,
 )
+from .policy import get_policy, relaxation_scope, RelaxationPolicy
+from .registry import relaxation_limitations, supported_relaxations
 from .straight_through import (
     abs_st,
     argmax_st,
@@ -90,8 +92,13 @@ from .straight_through import (
 
 
 __all__ = [
+    "RelaxationPolicy",
     "SoftBool",
     "SoftIndex",
+    "get_policy",
+    "relaxation_limitations",
+    "relaxation_scope",
+    "supported_relaxations",
     "abs",
     "abs_st",
     "all",
