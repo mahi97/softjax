@@ -65,12 +65,17 @@ def st(fn: Callable) -> Callable:
 
     @functools.wraps(fn)
     def wrapped(*args, **kwargs):
+        from softjax.policy import get_policy
+
         if mode_idx is not None and len(args) > mode_idx:
             # mode was passed positionally — extract it
             mode = args[mode_idx]
             args = args[:mode_idx] + args[mode_idx + 1:]
+        elif "mode" in kwargs:
+            mode = kwargs.pop("mode")
         else:
-            mode = kwargs.pop("mode", mode_default)
+            policy_mode = get_policy().mode
+            mode = policy_mode if policy_mode is not None else mode_default
         fw_y = fn(*args, **kwargs, mode="hard")
         bw_y = fn(*args, **kwargs, mode=mode)
         fw_leaves, fw_treedef = jtu.tree_flatten(fw_y, is_leaf=lambda x: x is None)

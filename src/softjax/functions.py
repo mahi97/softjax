@@ -26,6 +26,7 @@ from softjax.utils import (
     _unsquash_and_destandardize,
     _validate_softness,
 )
+from softjax.validation import relaxable
 
 
 SoftBool = Float[Array, "..."]  # probability in [0, 1]
@@ -92,6 +93,22 @@ def _soft_index_probs(soft_index: SoftIndex, is_log: bool) -> SoftIndex:
     if is_log:
         return jnp.exp(soft_index)
     return soft_index
+
+
+def _renormalize_soft_index(
+    soft_index: SoftIndex,
+    already_log: bool = False,
+) -> SoftIndex:
+    """Project a solver output back onto the probability simplex.
+
+    OT LBFGS (especially p-norm / c2) can miss target marginals by ~1% at
+    near-hard softness when a quantile support has a zero-mass endpoint.
+    SoftIndex outputs are defined to sum to 1, so we renormalize.
+    """
+    if already_log:
+        return soft_index - jax.nn.logsumexp(soft_index, axis=-1, keepdims=True)
+    denom = jnp.clip(jnp.sum(soft_index, axis=-1, keepdims=True), min=1e-10)
+    return soft_index / denom
 
 
 def _logaddexp_weighted(
@@ -544,6 +561,7 @@ def dynamic_slice(
 # Array-valued operators
 
 
+@relaxable("argmax")
 def argmax(
     x: Array,  # (..., n, ...)
     axis: int | None = None,
@@ -657,7 +675,9 @@ def argmax(
                 return_log_probs=project_return_log,
                 **ot_kwargs,
             )  # (..., ..., [n], 2)
-            soft_index = out[..., :, 1]  # (..., ..., [n])
+            soft_index = _renormalize_soft_index(
+                out[..., :, 1], already_log=project_return_log
+            )  # (..., ..., [n])
             soft_index_is_log = project_return_log
         elif method == "sorting_network":
             P = _argsort_via_sorting_network(
@@ -685,6 +705,7 @@ def argmax(
     )
 
 
+@relaxable("max")
 def max(
     x: Array,  # (..., n, ...)
     axis: int | None = None,
@@ -757,6 +778,7 @@ def max(
     return max_val
 
 
+@relaxable("argmin")
 def argmin(
     x: Array,  # (..., n, ...)
     axis: int | None = None,
@@ -786,6 +808,7 @@ def argmin(
     )
 
 
+@relaxable("min")
 def min(
     x: Array,  # (..., n, ...)
     axis: int | None = None,
@@ -819,6 +842,7 @@ def min(
     )
 
 
+@relaxable("argsort")
 def argsort(
     x: Array,  # (..., n, ...)
     axis: int | None = None,
@@ -955,7 +979,9 @@ def argsort(
                 return_log_probs=project_return_log,
                 **ot_kwargs,
             )  # (..., ..., [n], n)
-            soft_index = jnp.swapaxes(out, -2, -1)  # (..., ..., n, [n])
+            soft_index = _renormalize_soft_index(
+                jnp.swapaxes(out, -2, -1), already_log=project_return_log
+            )  # (..., ..., n, [n])
             soft_index_is_log = project_return_log
         elif method == "sorting_network":
             soft_index = _argsort_via_sorting_network(
@@ -974,6 +1000,7 @@ def argsort(
     )
 
 
+@relaxable("sort")
 def sort(
     x: Array,  # (..., n, ...)
     axis: int | None = None,
@@ -1103,6 +1130,7 @@ def sort(
     return soft_values  # (..., n, ...)
 
 
+@relaxable("argquantile")
 def argquantile(
     x: Array,  # (..., n, ...)
     q: Array,  # scalar or (k,)
@@ -1326,8 +1354,12 @@ def argquantile(
                 )  # (..., ..., [n], 4)
 
                 soft_index = jnp.swapaxes(out, -2, -1)  # (..., ..., 4, [n])
-                idx_k = soft_index[..., 1, :]  # (...,  ..., [n])
-                idx_k1 = soft_index[..., 2, :]  # (..., ..., [n])
+                idx_k = _renormalize_soft_index(
+                    soft_index[..., 1, :], already_log=project_return_log
+                )  # (...,  ..., [n])
+                idx_k1 = _renormalize_soft_index(
+                    soft_index[..., 2, :], already_log=project_return_log
+                )  # (..., ..., [n])
                 if project_return_log:
                     soft_index = _logaddexp_weighted(idx_k, idx_k1, a_b)
                     soft_index_is_log = True
@@ -1357,7 +1389,9 @@ def argquantile(
                 )  # (..., ..., [n], 3)
 
                 soft_index = jnp.swapaxes(out, -2, -1)  # (..., ..., 3, [n])
-                idx_k = soft_index[..., 1, :]  # (...,  ..., [n])
+                idx_k = _renormalize_soft_index(
+                    soft_index[..., 1, :], already_log=project_return_log
+                )  # (...,  ..., [n])
                 soft_index = idx_k  # (..., ..., [n]))
                 soft_index_is_log = project_return_log
         elif method == "sorting_network":
@@ -1385,6 +1419,7 @@ def argquantile(
     )
 
 
+@relaxable("quantile")
 def quantile(
     x: Array,  # (..., n, ...)
     q: Array,  # quantile in [0, 1]
@@ -1498,6 +1533,7 @@ def quantile(
     return quantile_val
 
 
+@relaxable("argmedian")
 def argmedian(
     x: Array,  # (..., n, ...)
     axis: int | None = None,
@@ -1529,6 +1565,7 @@ def argmedian(
     )
 
 
+@relaxable("median")
 def median(
     x: Array,  # (..., n, ...)
     axis: int | None = None,
@@ -1560,6 +1597,7 @@ def median(
     )
 
 
+@relaxable("argpercentile")
 def argpercentile(
     x: Array,  # (..., n, ...)
     p: Array,  # percentile in [0, 100]
@@ -1596,6 +1634,7 @@ def argpercentile(
     )
 
 
+@relaxable("percentile")
 def percentile(
     x: Array,  # (..., n, ...)
     p: Array,  # percentile in [0, 100]
@@ -1777,7 +1816,9 @@ def _argtop_k(
                     **ot_kwargs,
                 )  # (..., ..., [n], k+1)
                 soft_index = jnp.swapaxes(out, -2, -1)  # (..., ..., k+1, [n])
-                soft_index = soft_index[..., :k, :]  # (..., ..., k, [n])
+                soft_index = _renormalize_soft_index(
+                    soft_index[..., :k, :], already_log=project_return_log
+                )  # (..., ..., k, [n])
                 soft_index_is_log = project_return_log
         elif method == "sorting_network":
             P = _argsort_via_sorting_network(
@@ -1797,6 +1838,7 @@ def _argtop_k(
     )
 
 
+@relaxable("top_k")
 def top_k(
     x: Array,  # (..., n, ...)
     k: int,
@@ -1928,6 +1970,7 @@ def top_k(
     return values, soft_index
 
 
+@relaxable("rank")
 def rank(
     x: Array,  # (..., n, ...)
     axis: int | None = None,
@@ -2180,6 +2223,7 @@ def norm(x: Array, axis=None, keepdims=False) -> Array:
 # Elementwise operators
 
 
+@relaxable("sigmoidal")
 def sigmoidal(
     x: Array,
     softness: float | Array = 0.1,
@@ -2249,6 +2293,7 @@ def sigmoidal(
     return y
 
 
+@relaxable("softrelu")
 def softrelu(
     x: Array,
     softness: float | Array = 0.1,
@@ -2336,6 +2381,7 @@ def softrelu(
     return y
 
 
+@relaxable("heaviside")
 def heaviside(
     x: Array,
     softness: float | Array = 0.1,
@@ -2362,6 +2408,7 @@ def heaviside(
         return sigmoidal(x, softness=softness, mode=mode)
 
 
+@relaxable("round")
 def round(
     x: Array,
     softness: float | Array = 0.1,
@@ -2399,6 +2446,7 @@ def round(
         return jnp.sum(n * (w_left - w_right), axis=-1)
 
 
+@relaxable("sign")
 def sign(
     x: Array,
     softness: float | Array = 0.1,
@@ -2425,6 +2473,7 @@ def sign(
         return sigmoidal(x, mode=mode, softness=softness) * 2.0 - 1.0
 
 
+@relaxable("abs")
 def abs(
     x: Array,
     softness: float | Array = 0.1,
@@ -2451,6 +2500,7 @@ def abs(
         return x * sign(x, mode=mode, softness=softness)
 
 
+@relaxable("relu")
 def relu(
     x: Array,
     softness: float | Array = 0.1,
@@ -2478,6 +2528,7 @@ def relu(
         return softrelu(x, mode=mode, softness=softness, gated=gated)
 
 
+@relaxable("clip")
 def clip(
     x: Array,
     a: Array,
@@ -2515,6 +2566,7 @@ def clip(
 # Comparison operators
 
 
+@relaxable("greater")
 def greater(
     x: Array,
     y: Array,
@@ -2546,6 +2598,7 @@ def greater(
         return sigmoidal(x - y - epsilon, softness=softness, mode=mode)
 
 
+@relaxable("greater_equal")
 def greater_equal(
     x: Array,
     y: Array,
@@ -2577,6 +2630,7 @@ def greater_equal(
         return sigmoidal(x - y + epsilon, softness=softness, mode=mode)
 
 
+@relaxable("less")
 def less(
     x: Array,
     y: Array,
@@ -2610,6 +2664,7 @@ def less(
         )
 
 
+@relaxable("less_equal")
 def less_equal(
     x: Array,
     y: Array,
@@ -2641,6 +2696,7 @@ def less_equal(
         return logical_not(greater(x, y, softness=softness, mode=mode, epsilon=epsilon))
 
 
+@relaxable("equal")
 def equal(
     x: Array,
     y: Array,
@@ -2677,6 +2733,7 @@ def equal(
         )
 
 
+@relaxable("not_equal")
 def not_equal(
     x: Array,
     y: Array,
@@ -2718,6 +2775,7 @@ def not_equal(
         return 2.0 * tmp - 1.0
 
 
+@relaxable("isclose")
 def isclose(
     x: Array,
     y: Array,
