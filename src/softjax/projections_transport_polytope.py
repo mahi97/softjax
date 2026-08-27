@@ -85,6 +85,12 @@ def _proj_transport_polytope_entropic_lbfgs(
     nu = nu / jnp.sum(nu)
     n, m = C.shape
 
+    # Same gauge permutation as the p-norm solver: never pin a zero-mass target.
+    target_order = jnp.argsort(-nu)
+    inv_target_order = jnp.argsort(target_order)
+    C = C[:, target_order]
+    nu = nu[target_order]
+
     if gauge_fix:
         # Gauge fix: set g0 = 0, optimise f and g_rest to avoid singular system on implicit diff
         y0 = (jnp.zeros((n,), C.dtype), jnp.zeros((m - 1,), C.dtype))  # (f, g_rest)
@@ -122,6 +128,7 @@ def _proj_transport_polytope_entropic_lbfgs(
     else:
         f, g = sol.value
     log_gamma = (f[:, None] + g[None, :] - C) / epsilon
+    log_gamma = log_gamma[:, inv_target_order]
     if return_log_probs:
         return log_gamma.astype(orig_dtype)
     Gamma = jnp.exp(log_gamma)
@@ -155,6 +162,15 @@ def _proj_transport_polytope_pnorm_lbfgs(
     n, m = C.shape
     q = p / (p - 1.0)  # conjugate exponent
     lam_pow = lam ** (-(q - 1.0))  # lam^{-(q-1)}
+
+    # Gauge-fix the largest-mass target. Quantile/percentile OT uses a 3- or
+    # 4-point support whose first coordinate can have exact zero mass (q=0/1);
+    # pinning g[0]=0 on a zero-mass target leaves the dual Hessian singular
+    # and is the source of OT c2 quantile/percentile LBFGS failures.
+    target_order = jnp.argsort(-nu)
+    inv_target_order = jnp.argsort(target_order)
+    C = C[:, target_order]
+    nu = nu[target_order]
 
     if gauge_fix:
         # Gauge fix: set g0 = 0, optimise f and g_rest to avoid singular system on implicit diff
@@ -196,6 +212,7 @@ def _proj_transport_polytope_pnorm_lbfgs(
         f, g = sol.value
     S = f[:, None] + g[None, :] - C
     Gamma = lam_pow * jnp.maximum(S, 0.0) ** (q - 1.0)  # = λ^{-(q-1)}[S]_+^{q-1}
+    Gamma = Gamma[:, inv_target_order]
     return Gamma.astype(orig_dtype)
 
 

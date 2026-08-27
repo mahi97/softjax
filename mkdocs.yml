@@ -127,5 +127,6 @@ nav:
         - 'examples/manifold_points.ipynb'
     - API:
         - 'api/softjax_operators.md'
+        - 'api/relaxation.md'
         - 'api/random.md'
         - 'api/straight_through.md'

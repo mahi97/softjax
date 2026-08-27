@@ -72,7 +72,7 @@ src = ["src"]
 
 [tool.ruff.lint]
 fixable = ["I001", "F401", "UP"]
-ignore = ["E402", "E721", "E731", "E741", "F722", "UP038", "E501"]
+ignore = ["E402", "E721", "E731", "E741", "F722", "E501"]
 select = ["E", "F", "I001", "UP"]
 
 [tool.ruff.lint.isort]
@@ -80,3 +80,12 @@ combine-as-imports = true
 extra-standard-library = ["typing_extensions"]
 lines-after-imports = 2
 order-by-type = false
+known-first-party = ["softjax"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:jax.core.mapped_aval is deprecated:DeprecationWarning",
+    "ignore:jax.core.unmapped_aval is deprecated:DeprecationWarning",
+    "ignore:JAXopt is no longer maintained:DeprecationWarning",
+    "ignore:`NormalCG:DeprecationWarning",
+]

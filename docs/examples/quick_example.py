@@ -1,7 +1,9 @@
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
+
 import softjax as sj
+
 
 jnp.set_printoptions(precision=4, suppress=True)
 jax.config.update("jax_enable_x64", True)

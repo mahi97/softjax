@@ -24,6 +24,7 @@ from softjax.utils import (
     _canonicalize_shape,
     _check_broadcast_shape,
 )
+from softjax.validation import relaxable
 
 
 RandomMode = Literal["hard", "_hard", "smooth", "c0", "c1", "c2"]
@@ -93,11 +94,16 @@ def _cached_private_hard_st(fn):
     mode_idx = list(sig.parameters.keys()).index("mode")
 
     def wrapped(*args, **kwargs):
+        from softjax.policy import get_policy
+
         if len(args) > mode_idx:
             mode = args[mode_idx]
             args = args[:mode_idx] + args[mode_idx + 1 :]
+        elif "mode" in kwargs:
+            mode = kwargs.pop("mode")
         else:
-            mode = kwargs.pop("mode", mode_default)
+            policy_mode = get_policy().mode
+            mode = policy_mode if policy_mode is not None else mode_default
         fw_y = fn(*args, **kwargs, mode="_hard")
         bw_y = fn(*args, **kwargs, mode=mode)
         fw_leaves, fw_treedef = jtu.tree_flatten(fw_y, is_leaf=lambda x: x is None)
@@ -203,6 +209,7 @@ def _categorical_without_replacement(
     return soft_index
 
 
+@relaxable("categorical")
 def categorical(
     key: Array,
     logits: Float[Array, "..."],
@@ -320,6 +327,7 @@ def _choice_logits(p: Array | None, n_inputs: int) -> Array:
     return jnp.log(p)
 
 
+@relaxable("choice")
 def choice(
     key: Array,
     a: int | Array,
@@ -433,6 +441,7 @@ def _bernoulli_uniform(
     raise ValueError(f"got rng_mode={rng_mode!r}, expected 'high' or 'low'")
 
 
+@relaxable("bernoulli")
 def bernoulli(
     key: Array,
     p: Float[Array, "..."] = 0.5,
@@ -472,6 +481,7 @@ def bernoulli(
     return less(u, p, softness=softness, mode=mode)
 
 
+@relaxable("rademacher")
 def rademacher(
     key: Array,
     shape: tuple[int, ...] = (),
@@ -509,6 +519,7 @@ def rademacher(
     )
 
 
+@relaxable("permutation")
 def permutation(
     key: Array,
     x: int | Array,
@@ -587,6 +598,7 @@ def permutation(
     return take_along_axis(values, soft_index, axis=axis)
 
 
+@relaxable("binomial")
 def binomial(
     key: Array,
     n: Float[Array, "..."],
@@ -631,6 +643,7 @@ def binomial(
     return jnp.sum(samples, axis=0).astype(out_dtype)
 
 
+@relaxable("multinomial")
 def multinomial(
     key: Array,
     n: Float[Array, "..."],
